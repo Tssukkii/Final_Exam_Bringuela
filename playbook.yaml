@@ -1,0 +1,94 @@
+---
+- name: Install and configure enterprise service and monitoring tool
+  hosts: all
+  become: true
+  vars_files:
+    - config.yaml
+
+  tasks:
+    - name: Install enterprise service (Apache)
+      package:
+        name: "{{ 'apache2' if ansible_os_family == 'Debian' else 'httpd' }}"
+        state: present
+
+    - name: Configure enterprise service
+      template:
+        src: templates/apache2.conf.j2
+        dest: "{{ '/etc/apache2/apache2.conf' if ansible_os_family == 'Debian' else '/etc/httpd/conf/httpd.conf' }}"
+
+    - name: Start and enable enterprise service
+      service:
+        name: "{{ 'apache2' if ansible_os_family == 'Debian' else 'httpd' }}"
+        state: started
+        enabled: true
+
+    - name: Download Prometheus binary
+      get_url:
+        url: "https://github.com/prometheus/prometheus/releases/download/v{{ monitoring_tool.version }}/prometheus-{{ monitoring_tool.version }}.linux-amd64.tar.gz"
+        dest: /tmp/prometheus-{{ monitoring_tool.version }}.linux-amd64.tar.gz
+
+    - name: Extract Prometheus binary
+      unarchive:
+        src: /tmp/prometheus-{{ monitoring_tool.version }}.linux-amd64.tar.gz
+        dest: /usr/local/bin/
+        remote_src: yes
+
+    - name: Move Prometheus binaries to /usr/local/bin
+      command: >
+        mv /usr/local/bin/prometheus-{{ monitoring_tool.version }}.linux-amd64/prometheus /usr/local/bin/
+        mv /usr/local/bin/prometheus-{{ monitoring_tool.version }}.linux-amd64/promtool /usr/local/bin/
+      args:
+        removes: /usr/local/bin/prometheus
+        removes: /usr/local/bin/promtool
+
+    - name: Create Prometheus user
+      user:
+        name: prometheus
+        shell: /sbin/nologin
+
+    - name: Create Prometheus directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: prometheus
+        group: prometheus
+      loop:
+        - /etc/prometheus
+        - /var/lib/prometheus
+
+    - name: Configure Prometheus
+      template:
+        src: templates/prometheus.yml.j2
+        dest: /etc/prometheus/prometheus.yml
+
+    - name: Copy Prometheus service file
+      template:
+        src: /home/tracey/Final_Exam_Bringuela/templates/prometheus.service.j2
+        dest: /etc/systemd/system/prometheus.service
+
+    - name: Reload systemd
+      command: systemctl daemon-reload
+
+    - name: Start and enable Prometheus service
+      systemd:
+        name: prometheus
+        state: started
+        enabled: true
+
+    - name: Ensure MOTD file exists
+      file:
+        path: /etc/motd
+        state: touch
+ 
+    - name: Change MOTD
+      lineinfile:
+        path: /etc/motd
+        line: "Ansible Managed by {{ username }}"
+        state: present
+
+    - name: Ensure MOTD file has the correct permissions
+      file:
+        path: /etc/motd
+        owner: root
+        group: root
+        mode: '0644'

@@ -1,0 +1,12 @@
+enterprise_service:
+  name: "apache2"
+  version: "2.4.41"
+  config_file: "/etc/apache2/apache2.conf"
+
+monitoring_tool:
+  name: "Prometheus"
+  version: "2.31.1"
+  config_file: "/etc/prometheus/prometheus.yml"
+
+
+username: "Tracey"
